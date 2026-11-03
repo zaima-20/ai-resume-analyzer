@@ -1,5 +1,7 @@
 # AI Resume Analyzer
 
+**Live demo:** https://z-resume-analyzer-ai-app.streamlit.app
+
 A Streamlit web app that reviews your resume, explains exactly what to fix, and finds jobs that match your skills and experience.
 
 ## Features
