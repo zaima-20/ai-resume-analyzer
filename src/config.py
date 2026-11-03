@@ -72,6 +72,9 @@ GEMINI_MODEL: str = "gemini-3.5-flash-lite"  # change here to use a different Ge
 DAILY_SEARCH_LIMIT: int = 5
 DAILY_AI_REVIEW_LIMIT: int = 3
 
+# Set DEBUG_TIMING=1 to log how long each part of the app takes (see src/timing.py).
+DEBUG_TIMING: bool = (get_setting("DEBUG_TIMING") or "").strip().lower() in {"1", "true", "yes"}
+
 
 def has_key(name: str) -> bool:
     """Return True if the key `name` is set to a real value in secrets or the environment.

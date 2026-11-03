@@ -25,6 +25,7 @@ from src.llm_review import LLMReview
 from src.matcher import ScoredJob
 from src.profile import UserProfile
 from src.rule_checks import Issue
+from src.timing import timed, timed_call
 
 MAX_PAST_ANALYSES: int = 20
 MAX_SAVED_JOBS: int = 100
@@ -103,7 +104,8 @@ def user_client(state: MutableMapping[str, Any] | None = None) -> tuple[Client, 
         raise DatabaseError("Log in to save your data.")
     try:
         client = get_client(state)
-        session = client.auth.get_session()
+        with timed("supabase get_session (token check)"):
+            session = client.auth.get_session()
     except AuthError as error:
         raise DatabaseError(str(error)) from error
     except (SupabaseAuthError, httpx.HTTPError) as error:
@@ -143,6 +145,7 @@ def profile_from_json(data: object) -> UserProfile:
 # ---------- profiles table ----------
 
 
+@timed_call("supabase")
 def load_profile(state: MutableMapping[str, Any] | None = None) -> UserProfile | None:
     """Load the logged-in user's saved profile, or None if they haven't saved one yet.
 
@@ -162,6 +165,7 @@ def load_profile(state: MutableMapping[str, Any] | None = None) -> UserProfile |
     return profile_from_json(rows[0].get("profile")) if rows else None
 
 
+@timed_call("supabase")
 def save_profile(profile: UserProfile, state: MutableMapping[str, Any] | None = None) -> None:
     """Save the profile: insert the user's row the first time, update it after that.
 
@@ -179,14 +183,18 @@ def save_profile(profile: UserProfile, state: MutableMapping[str, Any] | None = 
 # ---------- analyses table ----------
 
 
+@timed_call("supabase")
 def save_analysis(
     file_name: str,
     word_count: int,
     rule_issues: list[Issue],
     ai_review: LLMReview | None,
     state: MutableMapping[str, Any] | None = None,
-) -> None:
+) -> SavedAnalysis:
     """Save the results of an analysis. The resume file and its text are NOT stored.
+
+    Returns:
+        The saved analysis, so the app can show it without reloading the list.
 
     Raises:
         DatabaseError: If it couldn't be saved.
@@ -203,6 +211,14 @@ def save_analysis(
         client.table("analyses").insert(row).execute()
     except (APIError, httpx.HTTPError) as error:
         raise friendly_error(error) from error
+    return SavedAnalysis(
+        id=0,  # the real id isn't needed on screen
+        created_at=datetime.now(timezone.utc),
+        file_name=file_name,
+        word_count=word_count,
+        issues=row["issues"],
+        ai_review=row["ai_review"],
+    )
 
 
 def parse_timestamp(value: object) -> datetime:
@@ -213,6 +229,7 @@ def parse_timestamp(value: object) -> datetime:
         return datetime.min
 
 
+@timed_call("supabase")
 def list_analyses(
     limit: int = MAX_PAST_ANALYSES, state: MutableMapping[str, Any] | None = None
 ) -> list[SavedAnalysis]:
@@ -271,6 +288,7 @@ def job_from_json(data: object) -> Job | None:
         return None
 
 
+@timed_call("supabase")
 def save_job(scored_job: ScoredJob, state: MutableMapping[str, Any] | None = None) -> bool:
     """Save a job with its score to the user's list.
 
@@ -294,6 +312,7 @@ def save_job(scored_job: ScoredJob, state: MutableMapping[str, Any] | None = Non
     return True
 
 
+@timed_call("supabase")
 def list_saved_jobs(
     limit: int = MAX_SAVED_JOBS, state: MutableMapping[str, Any] | None = None
 ) -> list[SavedJob]:
@@ -323,6 +342,7 @@ def list_saved_jobs(
     return saved
 
 
+@timed_call("supabase")
 def remove_saved_job(job_url: str, state: MutableMapping[str, Any] | None = None) -> None:
     """Remove a job from the user's saved list. Removing one that isn't there is fine.
 
@@ -349,6 +369,7 @@ SEARCHES: str = "searches"
 AI_REVIEWS: str = "ai_reviews"
 
 
+@timed_call("supabase")
 def use_quota(kind: str, daily_limit: int, state: MutableMapping[str, Any] | None = None) -> bool:
     """Count one use of a limited feature, if the user has any left today.
 
@@ -379,6 +400,7 @@ def use_quota(kind: str, daily_limit: int, state: MutableMapping[str, Any] | Non
     return response.data
 
 
+@timed_call("supabase")
 def usage_today(state: MutableMapping[str, Any] | None = None) -> dict[str, int]:
     """Return today's counts, e.g. {"searches": 2, "ai_reviews": 0}.
 
@@ -412,6 +434,7 @@ def usage_today(state: MutableMapping[str, Any] | None = None) -> dict[str, int]
 USER_DATA_TABLES: list[str] = ["analyses", "saved_jobs", "profiles"]
 
 
+@timed_call("supabase")
 def delete_my_data(state: MutableMapping[str, Any] | None = None) -> None:
     """Delete the user's saved profile, analyses and saved jobs. The account stays.
 
@@ -427,6 +450,7 @@ def delete_my_data(state: MutableMapping[str, Any] | None = None) -> None:
             raise friendly_error(error) from error
 
 
+@timed_call("supabase")
 def delete_my_account(state: MutableMapping[str, Any] | None = None) -> None:
     """Delete the logged-in user's account and, through the cascade, all their rows.
 

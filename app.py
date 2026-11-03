@@ -1,5 +1,8 @@
 """Streamlit UI for the AI Resume Analyzer (UI only, no business logic)."""
 
+import copy
+from datetime import date, datetime, timezone
+
 import streamlit as st
 
 from src.auth import AuthError, AuthUser, current_user, sign_in, sign_out, sign_up
@@ -31,6 +34,7 @@ from src.llm_review import LLMReview, LLMReviewError, review_resume
 from src.matcher import ScoredJob, rank_jobs
 from src.parser import ParsedResume, ResumeParseError, parse_resume
 from src.rule_checks import HIGH, LOW, MEDIUM, Issue, run_checks
+from src.timing import timed
 from src.profile import (
     EXPERIENCE_LEVELS,
     JOB_SOURCES,
@@ -99,7 +103,11 @@ def init_session_state() -> None:
     if "saved_jobs_error" not in st.session_state:
         st.session_state.saved_jobs_error = ""
     if "usage" not in st.session_state:
-        st.session_state.usage = None  # today's counts, reloaded after each limited action
+        st.session_state.usage = None  # today's counts, loaded once and updated locally
+    if "usage_day" not in st.session_state:
+        st.session_state.usage_day = None  # the UTC day `usage` belongs to
+    if "checks_memo" not in st.session_state:
+        st.session_state.checks_memo = None  # (inputs, issues) from the last run_checks()
     if "confirm_delete" not in st.session_state:
         st.session_state.confirm_delete = None  # "data" or "account" while asking "Are you sure?"
     if "account_message" not in st.session_state:
@@ -155,12 +163,19 @@ LIMITED_ACTIONS: dict[str, tuple[int, str, str]] = {
 }
 
 
+def utc_today() -> date:
+    """Today's date in UTC, the day the database counts usage by."""
+    return datetime.now(timezone.utc).date()
+
+
 def uses_left(kind: str) -> int | None:
     """How many uses of a limited action are left today, or None if unknown.
 
-    The counts are loaded once and again only after a limited action, not on every click.
+    The counts are loaded once per login (and again when the UTC day changes),
+    then kept up to date locally by try_use(), not reloaded on every click.
     """
-    if st.session_state.usage is None:
+    if st.session_state.usage is None or st.session_state.usage_day != utc_today():
+        st.session_state.usage_day = utc_today()
         try:
             st.session_state.usage = usage_today()
         except DatabaseError:
@@ -198,7 +213,10 @@ def try_use(kind: str) -> bool:
             f"(this protects the free API quotas). {error}"
         )
         return False
-    st.session_state.usage = None  # reload the counts once
+    # The database's answer tells us the new count, so update it here without reloading.
+    usage = st.session_state.usage
+    if usage and kind in usage:
+        usage[kind] = usage[kind] + 1 if allowed else max(usage[kind], limit)
     if not allowed:
         st.info(f"You've used your {limit} {plural} for today. Try again tomorrow.")
     return allowed
@@ -397,7 +415,8 @@ def render_upload_tab() -> None:
         st.session_state.resume_file_id = uploaded.file_id
         st.session_state.resume_file_name = uploaded.name
         try:
-            st.session_state.resume = parse_resume(uploaded.getvalue(), uploaded.name)
+            with timed("parse_resume"):
+                st.session_state.resume = parse_resume(uploaded.getvalue(), uploaded.name)
             st.session_state.resume_error = ""
         except ResumeParseError as error:
             st.session_state.resume = None
@@ -444,7 +463,7 @@ def render_analysis_tab() -> None:
     if profile is None:
         st.caption("Save your profile in tab 1 to also check the skills you listed.")
 
-    issues = run_checks(resume, profile)
+    issues = checks_for(resume, profile)
 
     st.subheader("Quick checks")
     metric_columns = st.columns(len(SEVERITY_DISPLAY))
@@ -553,14 +572,32 @@ def show_ai_review(review: LLMReview) -> None:
         st.write("None. Your resume covers the key terms for this role.")
 
 
+def checks_for(resume: ParsedResume, profile: UserProfile | None) -> list[Issue]:
+    """run_checks(), but only re-run when the resume or profile has changed.
+
+    The result is kept in this visitor's session_state (not a shared cache),
+    so one user's resume never ends up in memory shared with other users.
+    """
+    inputs = (st.session_state.resume_file_id, copy.deepcopy(profile))
+    memo = st.session_state.checks_memo
+    if memo is None or memo[0] != inputs:
+        with timed("run_checks"):
+            st.session_state.checks_memo = (inputs, run_checks(resume, profile))
+    return st.session_state.checks_memo[1]
+
+
 def save_analysis_to_account(resume: ParsedResume, issues: list[Issue], review: LLMReview) -> None:
     """Save a finished analysis (not the resume itself) and remember how it went."""
     try:
-        save_analysis(
+        saved = save_analysis(
             st.session_state.resume_file_name or "resume", resume.word_count, issues, review
         )
         st.session_state.ai_review_save_note = ("success", "Saved to your account.")
-        st.session_state.past_analyses = None  # reload the list to include this one
+        # Add it to the list on screen instead of reloading the whole list.
+        if st.session_state.past_analyses is not None and not st.session_state.past_analyses_error:
+            st.session_state.past_analyses = [saved] + st.session_state.past_analyses
+        else:
+            st.session_state.past_analyses = None  # load the list once, on the next run
     except DatabaseError as error:
         st.session_state.ai_review_save_note = ("warning", f"Not saved to your account. {error}")
 
@@ -668,26 +705,58 @@ def load_saved_jobs() -> list[SavedJob]:
     return st.session_state.saved_jobs
 
 
+def notify(message: str, icon: str) -> None:
+    """Queue a toast message from a button callback; show_pending_toast() displays it.
+
+    Callbacks of buttons inside a fragment can't display anything themselves,
+    so the message waits in session_state until the fragment draws it.
+    """
+    st.session_state.pending_toast = (message, icon)
+
+
+def show_pending_toast() -> None:
+    """Show (once) a toast queued by notify()."""
+    pending = st.session_state.pop("pending_toast", None)
+    if pending:
+        message, icon = pending
+        st.toast(message, icon=icon)
+
+
 def save_job_clicked(item: ScoredJob) -> None:
     """Callback for a card's "Save" button."""
     try:
-        if save_job(item):
-            st.toast(f"Saved: {item.job.title}", icon="✅")
-        else:
-            st.toast("This job is already in your saved jobs.", icon="ℹ️")
-        st.session_state.saved_jobs = None  # reload the list once, on the next run
+        newly_saved = save_job(item)
     except DatabaseError as error:
-        st.toast(f"Not saved. {error}", icon="⚠️")
+        notify(f"Not saved. {error}", "⚠️")
+        return
+
+    saved_list = st.session_state.saved_jobs
+    list_ok = saved_list is not None and not st.session_state.saved_jobs_error
+    if newly_saved:
+        notify(f"Saved: {item.job.title}", "✅")
+        if list_ok:
+            # Add it to the list on screen instead of reloading the whole list.
+            saved_list.insert(0, SavedJob(item.job, item.score, datetime.now(timezone.utc)))
+        else:
+            st.session_state.saved_jobs = None  # load the list once, on the next run
+    else:
+        notify("This job is already in your saved jobs.", "ℹ️")
+        if not list_ok or all(saved.job.url != item.job.url for saved in saved_list):
+            st.session_state.saved_jobs = None  # saved elsewhere: our list is out of date
 
 
 def remove_job_clicked(job_url: str) -> None:
     """Callback for a saved job's "Remove" button."""
     try:
         remove_saved_job(job_url)
-        st.toast("Removed from your saved jobs.", icon="🗑️")
-        st.session_state.saved_jobs = None
     except DatabaseError as error:
-        st.toast(f"Not removed. {error}", icon="⚠️")
+        notify(f"Not removed. {error}", "⚠️")
+        return
+    notify("Removed from your saved jobs.", "🗑️")
+    if st.session_state.saved_jobs is not None:
+        st.session_state.saved_jobs = [
+            saved for saved in st.session_state.saved_jobs if saved.job.url != job_url
+        ]
 
 
 def show_job_card(item: ScoredJob, is_saved: bool, button_key: str) -> None:
@@ -800,22 +869,50 @@ def show_saved_jobs() -> None:
 
 
 def render_jobs_tab() -> None:
-    """The Jobs tab: the job search (once a resume and profile exist), then saved jobs."""
+    """The Jobs tab: the search button, then results, search links and saved jobs."""
     st.header("Jobs")
-    render_job_search()
-    st.divider()
-    show_saved_jobs()  # shown even before any search
+    profile = render_job_search()
+    render_results_and_saved_jobs(profile)
 
 
-def render_job_search() -> None:
-    """Search the selected job sources on click, then show ranked, filterable results."""
+@st.fragment
+def render_results_and_saved_jobs(profile: UserProfile | None) -> None:
+    """Job results with filters, search links and saved jobs.
+
+    This is a Streamlit fragment: changing a filter or clicking Save/Remove
+    reruns only this part of the page, not all four tabs. Saved jobs are inside
+    it too, so saving a job updates the list below straight away.
+    """
+    with timed("jobs fragment (results + saved jobs)"):
+        show_pending_toast()
+        if profile is not None and st.session_state.job_results is not None:
+            if st.session_state.job_search_inputs != search_inputs(profile):
+                st.caption("Your profile or resume changed since this search. Click **Search jobs** to update.")
+            for kind, text in st.session_state.job_messages:
+                {"info": st.info, "warning": st.warning, "caption": st.caption}[kind](text)
+            show_job_results(st.session_state.job_results)
+
+        if profile is not None and "Search links" in profile.job_sources:
+            st.divider()
+            show_search_links(profile)
+
+        st.divider()
+        show_saved_jobs()  # shown even before any search
+
+
+def render_job_search() -> UserProfile | None:
+    """Show what will be searched and the "Search jobs" button; run the search on click.
+
+    Returns:
+        The profile, or None if a resume or saved profile is still missing.
+    """
     if st.session_state.resume is None:
         st.info("Upload your resume in tab 2 to find matching jobs.")
-        return
+        return None
     profile = st.session_state.profile
     if profile is None:
         st.info("Fill in and save your profile in tab 1 first. The job search uses your target title and location.")
-        return
+        return None
 
     st.markdown(
         f"**Searching for:** {escape_markdown(profile.target_title)}  \n"
@@ -834,22 +931,15 @@ def render_job_search() -> None:
         if clicked and try_use(SEARCHES):
             with st.spinner(f"Searching {', '.join(api_sources)}..."):
                 jobs, messages = run_job_search(profile)
-                st.session_state.job_results = rank_jobs(jobs, st.session_state.resume, profile)
+                with timed("rank_jobs"):
+                    st.session_state.job_results = rank_jobs(
+                        jobs, st.session_state.resume, profile
+                    )
             st.session_state.job_messages = messages
             st.session_state.job_search_inputs = search_inputs(profile)
             st.session_state.job_search_count += 1
         show_uses_left(SEARCHES)
-
-    if st.session_state.job_results is not None:
-        if st.session_state.job_search_inputs != search_inputs(profile):
-            st.caption("Your profile or resume changed since this search. Click **Search jobs** to update.")
-        for kind, text in st.session_state.job_messages:
-            {"info": st.info, "warning": st.warning, "caption": st.caption}[kind](text)
-        show_job_results(st.session_state.job_results)
-
-    if "Search links" in profile.job_sources:
-        st.divider()
-        show_search_links(profile)
+    return profile
 
 
 # ---------- Login screen and sidebar ----------
@@ -979,27 +1069,28 @@ def render_sidebar(user: AuthUser) -> None:
 st.set_page_config(page_title="AI Resume Analyzer", page_icon="📄", layout="centered")
 st.title("AI Resume Analyzer")
 
-user = current_user()
-if user is None:
-    render_login_screen()
-    st.stop()  # the four app tabs are only shown to logged-in visitors
+with timed("script run (whole page)"):
+    user = current_user()
+    if user is None:
+        render_login_screen()
+        st.stop()  # the four app tabs are only shown to logged-in visitors
 
-init_session_state()
-render_sidebar(user)
-load_saved_profile()  # once per login, before the form widgets are drawn
+    init_session_state()
+    render_sidebar(user)
+    load_saved_profile()  # once per login, before the form widgets are drawn
 
-profile_tab, upload_tab, analysis_tab, jobs_tab = st.tabs(
-    ["1. Your Profile", "2. Upload Resume", "3. Analysis", "4. Jobs"]
-)
+    profile_tab, upload_tab, analysis_tab, jobs_tab = st.tabs(
+        ["1. Your Profile", "2. Upload Resume", "3. Analysis", "4. Jobs"]
+    )
 
-with profile_tab:
-    render_profile_tab()
+    with profile_tab, timed("tab 1 profile"):
+        render_profile_tab()
 
-with upload_tab:
-    render_upload_tab()
+    with upload_tab, timed("tab 2 upload"):
+        render_upload_tab()
 
-with analysis_tab:
-    render_analysis_tab()
+    with analysis_tab, timed("tab 3 analysis"):
+        render_analysis_tab()
 
-with jobs_tab:
-    render_jobs_tab()
+    with jobs_tab, timed("tab 4 jobs"):
+        render_jobs_tab()

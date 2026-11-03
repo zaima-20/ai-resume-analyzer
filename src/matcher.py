@@ -9,6 +9,7 @@ Each job gets a score from 0 to 100, made of four parts (weights from CLAUDE.md)
 import re
 import sys
 from dataclasses import dataclass, field
+from functools import lru_cache
 
 from src.jobs.base import Job
 from src.parser import ParsedResume
@@ -224,19 +225,47 @@ def term_pattern(term: str) -> str:
     return rf"(?<!\w){body}(?!\w)"
 
 
+@lru_cache(maxsize=1024)
+def compiled_patterns(term: str) -> tuple[re.Pattern[str], ...]:
+    """The compiled regex(es) for a term, built once and reused (ranking calls this a lot)."""
+    if len(term.strip()) == 1:
+        forms = SINGLE_LETTER_FORMS.get(term.strip().lower(), [])
+    else:
+        forms = [term_pattern(term)]
+    return tuple(re.compile(form, re.IGNORECASE) for form in forms)
+
+
+@lru_cache(maxsize=1024)
+def quick_check_text(term: str) -> str:
+    """Lowercase text that must appear in any match of `term` (empty for single letters).
+
+    For "LLMs" this is "llm", because the pattern also matches the singular.
+    """
+    term = term.strip()
+    if len(term) == 1:
+        return ""
+    return (term[:-1] if is_plural(term) else term).lower()
+
+
+@lru_cache(maxsize=256)
+def lowered(text: str) -> str:
+    """text.lower(), remembered for the job and resume texts that are checked many times."""
+    return text.lower()
+
+
 def term_position(text: str, term: str) -> int | None:
     """Return where `term` first appears in `text`, or None. Case-insensitive.
 
     Single-letter skills ("C", "R") only count in clear forms such as
     "C programming", "C/C++" or "RStudio"; other single letters never match.
     """
-    if len(term.strip()) == 1:
-        patterns = SINGLE_LETTER_FORMS.get(term.strip().lower(), [])
-    else:
-        patterns = [term_pattern(term)]
+    # Fast path: if the letters aren't in the text at all, no regex can match.
+    # Most skills aren't in most job descriptions, so this skips most regex work.
+    if quick_check_text(term) not in lowered(text):
+        return None
 
-    positions = [match.start() for pattern in patterns
-                 if (match := re.search(pattern, text, re.IGNORECASE))]
+    positions = [match.start() for pattern in compiled_patterns(term)
+                 if (match := pattern.search(text))]
     return min(positions) if positions else None
 
 
@@ -372,8 +401,29 @@ def location_part(job: Job, profile: UserProfile | None) -> float:
     return LOCATION_MISMATCH
 
 
+def skills_you_have(user_skills: dict[str, int], target_title: str, resume_text: str) -> set[str]:
+    """Common tech skills that are never "missing" for you.
+
+    That's skills you listed, skills mentioned anywhere in your resume, and
+    skills in your target title. The answer is the same for every job, so
+    rank_jobs() works it out once instead of once per job.
+    """
+    listed = {skill_key(name) for name in user_skills}
+    return {
+        skill
+        for skill in COMMON_TECH_SKILLS
+        if skill_key(skill) in listed
+        or term_position(resume_text, skill) is not None
+        or term_position(target_title, skill) is not None
+    }
+
+
 def find_missing_skills(
-    job_text: str, user_skills: dict[str, int], target_title: str = "", resume_text: str = ""
+    job_text: str,
+    user_skills: dict[str, int],
+    target_title: str = "",
+    resume_text: str = "",
+    have: set[str] | None = None,
 ) -> list[str]:
     """List up to 5 common tech skills the job mentions that you don't have.
 
@@ -381,15 +431,14 @@ def find_missing_skills(
     resume (e.g. "Deep Learning" in a job bullet), or in your target title
     ("Machine Learning" for a Machine Learning Engineer).
     Skills are returned in the order they first appear in the job text.
+
+    `have` can pass in skills_you_have() worked out in advance, to save time.
     """
-    have = {skill_key(name) for name in user_skills}
+    if have is None:
+        have = skills_you_have(user_skills, target_title, resume_text)
     found: list[tuple[int, str]] = []
     for skill in COMMON_TECH_SKILLS:
-        if (
-            skill_key(skill) in have
-            or term_position(resume_text, skill) is not None
-            or term_position(target_title, skill) is not None
-        ):
+        if skill in have:
             continue
         position = term_position(job_text, skill)
         if position is not None:
@@ -539,16 +588,22 @@ def remove_duplicates(jobs: list[Job]) -> list[Job]:
 
 
 def score_job(
-    job: Job, user_skills: dict[str, int], profile: UserProfile | None, resume_text: str = ""
+    job: Job,
+    user_skills: dict[str, int],
+    profile: UserProfile | None,
+    resume_text: str = "",
+    have: set[str] | None = None,
 ) -> ScoredJob:
     """Score one job against your skills and profile.
 
     `resume_text` is the whole resume, used so skills you mention anywhere
-    in it are never listed as missing.
+    in it are never listed as missing. `have` is skills_you_have(), if already known.
     """
     job_text = f"{job.title}\n{job.description}"
     skills_score, matched = skills_part(job_text, user_skills)
     target_title = profile.target_title if profile else ""
+    if have is None:
+        have = skills_you_have(user_skills, target_title, resume_text)
     title_score = title_part(job.title, target_title)
     experience = experience_part(job, profile)
     location_score = location_part(job, profile)
@@ -563,7 +618,7 @@ def score_job(
         job=job,
         score=round(total),
         matched_skills=matched,
-        missing_skills=find_missing_skills(job_text, user_skills, target_title, resume_text),
+        missing_skills=find_missing_skills(job_text, user_skills, have=have),
         experience_note=experience.note,
         above_level=experience.above_level,
         meets_experience=experience.meets_requirement,
@@ -590,8 +645,10 @@ def rank_jobs(
         ScoredJobs sorted by score, highest first. Equal scores keep their order.
     """
     user_skills = collect_user_skills(resume, profile)
+    # The same for every job, so worked out once here rather than once per job.
+    have = skills_you_have(user_skills, profile.target_title if profile else "", resume.text)
     scored = [
-        score_job(job, user_skills, profile, resume.text) for job in remove_duplicates(jobs)
+        score_job(job, user_skills, profile, resume.text, have) for job in remove_duplicates(jobs)
     ]
     return sorted(scored, key=lambda item: item.score, reverse=True)
 

@@ -214,6 +214,14 @@ def test_save_analysis_stores_results_but_not_the_resume(client: MagicMock, visi
     assert row["ai_review"]["problems"][0]["why_it_matters"] == "Sounds passive"
 
 
+def test_save_analysis_returns_what_was_saved(client: MagicMock, visitor: dict) -> None:
+    saved = save_analysis("my_cv.pdf", 412, ISSUES, REVIEW, visitor)
+    assert isinstance(saved, SavedAnalysis)
+    assert (saved.file_name, saved.word_count) == ("my_cv.pdf", 412)
+    assert (saved.overall_score, saved.ats_score) == (72, 80)
+    assert saved.created_at.tzinfo is not None
+
+
 def test_save_analysis_without_ai_review(client: MagicMock, visitor: dict) -> None:
     save_analysis("cv.docx", 300, [], None, visitor)
     [row] = table(client).insert.call_args.args

@@ -31,6 +31,7 @@ from src.matcher import (
     remove_duplicates,
     skill_key,
     skills_part,
+    skills_you_have,
     term_position,
     title_part,
     title_words,
@@ -589,3 +590,35 @@ def test_job_asking_2_years_ranks_below_job_with_no_requirement_for_0_years() ->
     ranked = rank_jobs([asks_two, no_requirement], make_resume(), profile)
     assert [item.job.company for item in ranked] == ["A", "B"]
     assert ranked[1].experience_note == "Asks for 2+ years, you have 0: a bit above your level"
+
+
+# --- Speed-ups must not change results ---
+
+
+@pytest.mark.parametrize(
+    ("text", "term", "found"),
+    [
+        ("Experience with PYTHON", "Python", True),  # case doesn't matter
+        ("We use LLMs daily", "LLM", True),  # acronym plural
+        ("Fine-tune an LLM", "LLMs", True),  # plural term, singular text
+        ("Strong C programming", "C", True),  # single letter, clear form
+        ("Grade C student", "C", False),
+        ("JavaScript only", "Java", False),  # letters present, but not a whole word
+        ("Nothing relevant here", "Kubernetes", False),  # quick check skips the regex
+    ],
+)
+def test_term_position_quick_check_keeps_results(text: str, term: str, found: bool) -> None:
+    assert (term_position(text, term) is not None) is found
+
+
+def test_precomputed_skills_give_the_same_missing_skills() -> None:
+    job_text = "Python, Docker, Kubernetes, Machine Learning, Deep Learning and AWS"
+    user_skills = {"Python": 5}
+    target = "Machine Learning Engineer"
+    resume_text = "Built Deep Learning models"
+    have = skills_you_have(user_skills, target, resume_text)
+
+    assert {"Python", "Machine Learning", "Deep Learning"} <= have
+    assert find_missing_skills(job_text, user_skills, target, resume_text) == (
+        find_missing_skills(job_text, user_skills, have=have)
+    ) == ["Docker", "Kubernetes", "AWS"]
