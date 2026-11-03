@@ -45,6 +45,7 @@ from src.profile import (
 )
 
 DEFAULT_RATING: int = 3
+JOBS_PER_PAGE: int = 20  # job cards shown at first, and added by each "Show more"
 
 # Profile job source names -> the class that searches it. "Search links" isn't
 # an API; it's the links section at the bottom of the Jobs tab.
@@ -106,6 +107,10 @@ def init_session_state() -> None:
         st.session_state.usage = None  # today's counts, loaded once and updated locally
     if "usage_day" not in st.session_state:
         st.session_state.usage_day = None  # the UTC day `usage` belongs to
+    if "jobs_to_show" not in st.session_state:
+        st.session_state.jobs_to_show = JOBS_PER_PAGE  # job cards shown; "Show more" adds a page
+    if "job_page_filters" not in st.session_state:
+        st.session_state.job_page_filters = None  # search + filters the count belongs to
     if "checks_memo" not in st.session_state:
         st.session_state.checks_memo = None  # (inputs, issues) from the last run_checks()
     if "confirm_delete" not in st.session_state:
@@ -819,7 +824,7 @@ def show_job_results(results: list[ScoredJob]) -> None:
         help="Shows jobs whose level and years you fully meet, plus jobs that state no requirement.",
     )
 
-    shown = [
+    matching = [
         item for item in results
         if source_family(item.job) in chosen
         and (item.job.remote or not remote_only)
@@ -827,10 +832,36 @@ def show_job_results(results: list[ScoredJob]) -> None:
         and not (meets_only and not item.meets_experience)
         and item.score >= min_score
     ]
-    st.write(f"Showing {len(shown)} of {len(results)} jobs")
+
+    # Start again at the first page after a new search or any filter change.
+    filters = (search_id, tuple(chosen), min_score, remote_only, hide_above, meets_only)
+    if st.session_state.job_page_filters != filters:
+        st.session_state.job_page_filters = filters
+        st.session_state.jobs_to_show = JOBS_PER_PAGE
+
+    visible = matching[: st.session_state.jobs_to_show]
+    if len(matching) == len(results):
+        st.write(f"Showing {len(visible)} of {len(results)} jobs")
+    else:
+        st.write(f"Showing {len(visible)} of {len(matching)} matching jobs ({len(results)} found)")
+
     saved_urls = {saved.job.url for saved in load_saved_jobs()}
-    for number, item in enumerate(shown):
+    for number, item in enumerate(visible):
         show_job_card(item, item.job.url in saved_urls, f"save_job_{search_id}_{number}")
+
+    remaining = len(matching) - len(visible)
+    if remaining > 0:
+        # Inside the jobs fragment, so this only reruns the job list.
+        st.button(
+            f"Show more ({min(JOBS_PER_PAGE, remaining)} of {remaining} left)",
+            key=f"show_more_jobs_{search_id}",
+            on_click=show_more_jobs,
+        )
+
+
+def show_more_jobs() -> None:
+    """Callback for "Show more": show the next page of job cards."""
+    st.session_state.jobs_to_show += JOBS_PER_PAGE
 
 
 def show_search_links(profile: UserProfile) -> None:
