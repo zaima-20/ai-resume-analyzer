@@ -112,6 +112,17 @@ Each job card shows its matched skills, up to five missing skills and a short ex
 
    It opens at http://localhost:8501. Sign up, confirm your email, and log in.
 
+## Deploy
+
+The app runs on [Streamlit Community Cloud](https://share.streamlit.io). There is no `.env` file there; keys come from the app's **Secrets** settings instead.
+
+1. Push the repository to GitHub (`.env` and `.streamlit/secrets.toml` are git-ignored, so no keys are uploaded).
+2. On Streamlit Community Cloud, create an app from the repository with `app.py` as the main file.
+3. Open the app's **Settings → Secrets** and paste the six keys in TOML format. Use [`.streamlit/secrets.toml.example`](.streamlit/secrets.toml.example) as a template and fill in your real values.
+4. In Supabase, go to **Authentication → URL Configuration** and set the **Site URL** to your app's address, so confirmation emails link to the deployed app.
+
+The app reads each key from Streamlit secrets first and falls back to `.env`, so the same code works locally and in the cloud.
+
 ## Running tests
 
 ```bash
