@@ -1,0 +1,27 @@
+# Secrets
+.env
+.streamlit/secrets.toml
+
+# Virtual environment
+venv/
+.venv/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Job search cache files
+cache/
+.cache/
+*.cache.json
+
+# Test / tooling caches
+.pytest_cache/
+
+# Editor / OS files
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Personal files (real resumes must never be committed)
+my_cv.pdf

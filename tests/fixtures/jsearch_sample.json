@@ -1,0 +1,150 @@
+{
+  "status": "OK",
+  "request_id": "00000000-0000-0000-0000-000000000000",
+  "parameters": {
+    "query": "machine learning engineer in Lahore, Pakistan",
+    "num_pages": 1,
+    "country": "us",
+    "language": "en"
+  },
+  "data": {
+    "jobs": [
+      {
+        "job_id": "U0ltWmo3c3lTemlUWDQ1bUFB",
+        "job_title": "Senior AI Solutions Engineer",
+        "employer_name": "ibex",
+        "employer_logo": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS964Xcw_qbDxbpIqX9hPRIJve_Of20MnKqJRgu&s=0",
+        "employer_website": "https://www.ibex.co",
+        "job_publisher": "LinkedIn",
+        "job_employment_type": "Full-time",
+        "job_employment_types": [
+          "FULLTIME"
+        ],
+        "job_apply_link": "https://pk.linkedin.com/jobs/view/senior-ai-solutions-engineer-at-ibex-4473346046",
+        "job_apply_is_direct": false,
+        "apply_options": [
+          {
+            "apply_link": "https://pk.linkedin.com/jobs/view/senior-ai-solutions-engineer-at-ibex-4473346046",
+            "is_direct": false,
+            "publisher": "LinkedIn"
+          }
+        ],
+        "job_description": "We’re Hiring: Senior AI Solutions Engineer\n\nWe’re looking for a Senior AI Solutions Engineer to join our team and work on production-grade AI applications, LLM-powered workflows, and modern web applications.\n\nIf you have hands-on experience building LLM applications, RAG systems, AI evaluation frameworks, and cloud-based applications, we’d love to hear from you.\n\nLLM Application Engineering\n• ...",
+        "job_is_remote": false,
+        "job_posted_at": "5 days ago",
+        "job_posted_at_timestamp": 1793232000,
+        "job_posted_at_datetime_utc": "2026-10-29T00:00:00.000Z",
+        "job_location": "Lahore, Pakistan",
+        "job_city": "Lahore",
+        "job_state": null,
+        "job_country": "PK",
+        "job_latitude": 31.5203696,
+        "job_longitude": 74.35874729999999,
+        "job_benefits": null,
+        "job_benefits_strings": null,
+        "job_google_link": "https://www.google.com/search?q=jobs&gl=us&hl=en&udm=8#vhid=vt%3D20/docid%3DSImZj7sySziTX45mAAAAAA%3D%3D&vssid=jobs-detail-viewer",
+        "job_salary": null,
+        "job_salary_string": null,
+        "job_min_salary": null,
+        "job_max_salary": null,
+        "job_salary_period": null,
+        "job_highlights": {},
+        "job_onet_soc": null,
+        "job_onet_job_zone": null,
+        "employer_reviews": null,
+        "job_uid": "SImZj7sySziTX45mAAAAAA=="
+      },
+      {
+        "job_id": "NWVCV3ZOUnExZ3RkcWdReUFB",
+        "job_title": "AI/ML & Data Engineer - Solutions & Business Development",
+        "employer_name": "Devsinc",
+        "employer_logo": "https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://devsinc.com&size=128",
+        "employer_website": "https://devsinc.com",
+        "job_publisher": "Workable Jobs",
+        "job_employment_type": "Full-time",
+        "job_employment_types": [
+          "FULLTIME"
+        ],
+        "job_apply_link": "https://apply.workable.com/devsinc-17/j/28C90DC56C/",
+        "job_apply_is_direct": false,
+        "apply_options": [
+          {
+            "apply_link": "https://apply.workable.com/devsinc-17/j/28C90DC56C/",
+            "is_direct": false,
+            "publisher": "Workable Jobs"
+          }
+        ],
+        "job_description": "We are looking for a highly skilled AI/ML & Data Engineer with strong technical expertise, excellent communication skills, and the ability to engage with clients and drive opportunities toward closure. The ideal candidate will combine hands-on engineering capabilities with strong business acumen - someone who can understand complex client requirements, architect the right solution, present it ...",
+        "job_is_remote": false,
+        "job_posted_at": null,
+        "job_posted_at_timestamp": null,
+        "job_posted_at_datetime_utc": null,
+        "job_location": "Lahore, Pakistan",
+        "job_city": "Lahore",
+        "job_state": null,
+        "job_country": "PK",
+        "job_latitude": 31.5203696,
+        "job_longitude": 74.35874729999999,
+        "job_benefits": null,
+        "job_benefits_strings": null,
+        "job_google_link": "https://www.google.com/search?q=jobs&gl=us&hl=en&udm=8#vhid=vt%3D20/docid%3D5eBWvNRq1gtdqgQyAAAAAA%3D%3D&vssid=jobs-detail-viewer",
+        "job_salary": null,
+        "job_salary_string": null,
+        "job_min_salary": null,
+        "job_max_salary": null,
+        "job_salary_period": null,
+        "job_highlights": {},
+        "job_onet_soc": null,
+        "job_onet_job_zone": null,
+        "employer_reviews": null,
+        "job_uid": "5eBWvNRq1gtdqgQyAAAAAA=="
+      },
+      {
+        "job_id": "T1I1STlkMmR4UEUxVDRfREFB",
+        "job_title": "Machine Learning Engineer — Build Cutting-Edge AI Solutions",
+        "employer_name": "SmartConnect Qatar",
+        "employer_logo": null,
+        "employer_website": null,
+        "job_publisher": "Jobrapido.com",
+        "job_employment_type": "Full-time",
+        "job_employment_types": [
+          "FULLTIME"
+        ],
+        "job_apply_link": "https://pk.jobrapido.com/jobpreview/3849173125090508800",
+        "job_apply_is_direct": false,
+        "apply_options": [
+          {
+            "apply_link": "https://pk.jobrapido.com/jobpreview/3849173125090508800",
+            "is_direct": false,
+            "publisher": "Jobrapido.com"
+          }
+        ],
+        "job_description": "SmartConnect Qatar is seeking a Machine Learning Engineer in Faisalabad, Pakistan to design, implement and optimize ML models. You will collaborate with data scientists and software engineers to translate complex problems into scalable ML solutions.\nIdeal candidates have hands-on Python or R experience and familiarity with TensorFlow or PyTorch, plus a passion for cutting-edge technology and ...",
+        "job_is_remote": false,
+        "job_posted_at": "8 days ago",
+        "job_posted_at_timestamp": 1792972800,
+        "job_posted_at_datetime_utc": "2026-10-26T00:00:00.000Z",
+        "job_location": "Lahore, Pakistan",
+        "job_city": "Lahore",
+        "job_state": null,
+        "job_country": "PK",
+        "job_latitude": 31.5203696,
+        "job_longitude": 74.35874729999999,
+        "job_benefits": null,
+        "job_benefits_strings": null,
+        "job_google_link": "https://www.google.com/search?q=jobs&gl=us&hl=en&udm=8#vhid=vt%3D20/docid%3DOR5I9d2dxPE1T4_DAAAAAA%3D%3D&vssid=jobs-detail-viewer",
+        "job_salary": null,
+        "job_salary_string": null,
+        "job_min_salary": null,
+        "job_max_salary": null,
+        "job_salary_period": null,
+        "job_highlights": {},
+        "job_onet_soc": null,
+        "job_onet_job_zone": null,
+        "employer_reviews": null,
+        "job_uid": "OR5I9d2dxPE1T4_DAAAAAA=="
+      }
+    ],
+    "cursor": "ErcECvcDQUREYldlYTBEV0JH"
+  }
+}
